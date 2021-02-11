@@ -22,7 +22,7 @@ cmake_minimum_required(VERSION 3.2)
 # There is no C per se in WDT but if you use CXX only here many checks fail
 # Version is Major.Minor.YYMMDDX for up to 10 releases per day (X from 0 to 9)
 # Minor currently is also the protocol version - has to match with Protocol.cpp
-project("WDT" LANGUAGES C CXX VERSION 1.31.1903011)
+project("WDT" LANGUAGES C CXX VERSION 1.32.1910230)
 
 # On MacOS this requires the latest (master) CMake (and/or CMake 3.1.1/3.2)
 # WDT itself works fine with C++11 (gcc 4.8 for instance) but more recent folly
@@ -32,13 +32,14 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED on)
 
 # somehow 'option' for this doesn't seeem to work/I don't know how to make it
-set(BUILD_SHARED_LIBS on CACHE Bool "build shared libs")
+set(BUILD_SHARED_LIBS on CACHE BOOL "build shared libs")
 
 # CMake default behavior should be to set rpath when needed (non system install)
 # it's not so let's set this for now:
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 
+set(WDT_USE_SYSTEM_FOLLY Off CACHE BOOL "Use folly library from system (default off)")
 
 # Optimized by default
 # TODO: This doesn't seem to work / sets default to "" instead of Release...
@@ -51,32 +52,35 @@ set(CMAKE_CXX_FLAGS "-msse4.2 -mpclmul")
 #set(CMAKE_CXX_FLAGS "-msse4.2 -mpclmul -Wextra -Wsign-compare -Wunused-variable -Wconversion -Wsign-conversion")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "_bin/wdt")
 
-# Check that we have the Folly source tree
-set(FOLLY_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../folly" CACHE path
-    "Folly source tree (folly/Conv.h should be reachable from there")
-# Check for folly - TODO: this doesn't work well for relative paths
-# (because of relative to build dir vs relative to source tree for -I)
-if(NOT EXISTS "${FOLLY_SOURCE_DIR}/folly/Conv.h")
-  MESSAGE(FATAL_ERROR "${FOLLY_SOURCE_DIR}/folly/Conv.h not found
-Fix using:
-(in a sister directory of the wdt source tree - same level:)
-git clone https://github.com/facebook/folly.git
-or change FOLLY_SOURCE_DIR (use ccmake or -DFOLLY_SOURCE_DIR=...)
-")
+if (NOT WDT_USE_SYSTEM_FOLLY)
+  # Check that we have the Folly source tree
+  set(FOLLY_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../folly" CACHE PATH
+      "Folly source tree (folly/Conv.h should be reachable from there")
+  # Check for folly - TODO: this doesn't work well for relative paths
+  # (because of relative to build dir vs relative to source tree for -I)
+  if(NOT EXISTS "${FOLLY_SOURCE_DIR}/folly/Conv.h")
+    MESSAGE(FATAL_ERROR "${FOLLY_SOURCE_DIR}/folly/Conv.h not found
+  Fix using:
+  (in a sister directory of the wdt source tree - same level:)
+  git clone https://github.com/facebook/folly.git
+  or change FOLLY_SOURCE_DIR (use ccmake or -DFOLLY_SOURCE_DIR=...)
+  or change WDT_USE_SYSTEM_FOLLY (use ccmake or -DWDT_USE_SYSTEM_FOLLY=...)
+  ")
+  endif()
+
+
+  # The part of folly that isn't pure .h and we use:
+  set (FOLLY_CPP_SRC
+  "${FOLLY_SOURCE_DIR}/folly/Conv.cpp"
+  "${FOLLY_SOURCE_DIR}/folly/Demangle.cpp"
+  "${FOLLY_SOURCE_DIR}/folly/lang/CString.cpp"
+  "${FOLLY_SOURCE_DIR}/folly/hash/Checksum.cpp"
+  "${FOLLY_SOURCE_DIR}/folly/hash/detail/ChecksumDetail.cpp"
+  "${FOLLY_SOURCE_DIR}/folly/hash/detail/Crc32cDetail.cpp"
+  "${FOLLY_SOURCE_DIR}/folly/hash/detail/Crc32CombineDetail.cpp"
+  "${FOLLY_SOURCE_DIR}/folly/ScopeGuard.cpp"
+  )
 endif()
-
-
-# The part of folly that isn't pure .h and we use:
-set (FOLLY_CPP_SRC
-"${FOLLY_SOURCE_DIR}/folly/Conv.cpp"
-"${FOLLY_SOURCE_DIR}/folly/Demangle.cpp"
-"${FOLLY_SOURCE_DIR}/folly/hash/Checksum.cpp"
-"${FOLLY_SOURCE_DIR}/folly/hash/detail/ChecksumDetail.cpp"
-"${FOLLY_SOURCE_DIR}/folly/hash/detail/Crc32cDetail.cpp"
-"${FOLLY_SOURCE_DIR}/folly/hash/detail/Crc32CombineDetail.cpp"
-"${FOLLY_SOURCE_DIR}/folly/lang/ColdClass.cpp"
-"${FOLLY_SOURCE_DIR}/folly/ScopeGuard.cpp"
-)
 
 # WDT's library proper - comes from: ls -1 *.cpp | grep -iv test
 add_library(wdt_min
@@ -115,6 +119,8 @@ Wdt.cpp
 )
 add_library(wdt ${WDT_FLAGS_RELATED_SRC})
 
+set_property(TARGET wdt PROPERTY VERSION ${PROJECT_VERSION})
+set_property(TARGET wdt_min PROPERTY VERSION ${PROJECT_VERSION})
 target_link_libraries(wdt wdt_min)
 
 
@@ -137,13 +143,39 @@ find_library(GLOG_LIBRARY glog)
 # Gflags
 find_path(GFLAGS_INCLUDE_DIR gflags/gflags.h)
 find_library(GFLAGS_LIBRARY gflags)
+# GFLAGS_NAMESPACE is defined in most releases but not in all
+include(CheckCXXSymbolExists)
+list(APPEND CMAKE_REQUIRED_INCLUDES "${GFLAGS_INCLUDE_DIR}/")
+list(APPEND CMAKE_REQUIRED_LIBRARIES "${GFLAGS_LIBRARY}")
+check_cxx_symbol_exists(GFLAGS_NAMESPACE "gflags/gflags.h" CMAKE_GFLAGS_NAMESPACE)
+if (NOT CMAKE_GFLAGS_NAMESPACE)
+  check_cxx_symbol_exists(gflags::GetArgv "gflags/gflags.h" CMAKE_GFLAGS_GFLAGS_GETARGV)
+  if (CMAKE_GFLAGS_GFLAGS_GETARGV)
+    add_definitions("-DGFLAGS_NAMESPACE=gflags")
+  else()
+    check_cxx_symbol_exists(google::GetArgv "gflags/gflags.h" CMAKE_GFLAGS_GOOGLE_GETARGV)
+    if (CMAKE_GFLAGS_GOOGLE_GETARGV)
+      add_definitions("-DGFLAGS_NAMESPACE=google")
+    endif()
+  endif()
+endif()
+list(REMOVE_ITEM CMAKE_REQUIRED_INCLUDES "${GFLAGS_INCLUDE_DIR}/")
+list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES "${GFLAGS_LIBRARY}")
 # OpenSSL's crypto lib
 find_package(OpenSSL REQUIRED)
 include_directories(${OPENSSL_INCLUDE_DIR})
+# System Folly
+if (WDT_USE_SYSTEM_FOLLY)
+  find_path(FOLLY_INCLUDE_DIR folly/Conv.h)
+  find_library(FOLLY_LIBRARY folly)
+else()
+  set(FOLLY_LIBRARY folly4wdt)
+  set(FOLLY_INCLUDE_DIR "${FOLLY_SOURCE_DIR}")
+endif()
 
 # You can also add jemalloc to the list if you have it/want it
 target_link_libraries(wdt_min
-  folly4wdt
+  ${FOLLY_LIBRARY}
   ${GLOG_LIBRARY}
   ${GFLAGS_LIBRARY}
   ${Boost_LIBRARIES}
@@ -166,7 +198,6 @@ check_function_exists(posix_fadvise HAS_POSIX_FADVISE)
 # C based check (which fail with the c++ setting thereafter...)
 check_function_exists(clock_gettime FOLLY_HAVE_CLOCK_GETTIME)
 # was: check_library_exists(rt clock_gettime "" FOLLY_HAVE_CLOCK_GETTIME)
-check_function_exists(memrchr FOLLY_HAVE_MEMRCHR)
 set(SAVE_CMRL ${CMAKE_REQUIRED_LIBRARIES}) #globals are evil/ugly
 set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
 check_function_exists(pthread_atfork FOLLY_HAVE_PTHREAD_ATFORK)
@@ -194,19 +225,21 @@ configure_file(build/folly-config.h.in folly/folly-config.h)
 # Wdt's config/version
 configure_file(WdtConfig.h.in wdt/WdtConfig.h)
 
-# Malloc stuff  tied to not supporting weaksympbols
-if (NOT FOLLY_HAVE_WEAK_SYMBOLS)
-  list(APPEND FOLLY_CPP_SRC "${FOLLY_SOURCE_DIR}/folly/memory/detail/MallocImpl.cpp")
-  message(STATUS "no weak symbols, adding MallocImpl to folly src")
-endif()
+if (NOT WDT_USE_SYSTEM_FOLLY)
+  # Malloc stuff  tied to not supporting weaksympbols
+  if (NOT FOLLY_HAVE_WEAK_SYMBOLS)
+    list(APPEND FOLLY_CPP_SRC "${FOLLY_SOURCE_DIR}/folly/memory/detail/MallocImpl.cpp")
+    message(STATUS "no weak symbols, adding MallocImpl to folly src")
+  endif()
 
-add_library(folly4wdt ${FOLLY_CPP_SRC})
-target_link_libraries(folly4wdt ${GLOG_LIBRARY} ${DOUBLECONV_LIBRARY})
+  add_library(folly4wdt ${FOLLY_CPP_SRC})
+  target_link_libraries(folly4wdt ${GLOG_LIBRARY} ${DOUBLECONV_LIBRARY})
+endif()
 
 # Order is important - inside fb we want the above
 # folly-config.h to be picked up instead of the fbcode one
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
-include_directories(${FOLLY_SOURCE_DIR})
+include_directories(${FOLLY_INCLUDE_DIR})
 include_directories(${DOUBLECONV_INCLUDE_DIR})
 include_directories(${GLOG_INCLUDE_DIR})
 include_directories(${GFLAGS_INCLUDE_DIR})
@@ -219,11 +252,19 @@ target_link_libraries(wdtbin wdt_min)
 
 ### Install rules
 set_target_properties(wdtbin PROPERTIES RUNTIME_OUTPUT_NAME "wdt")
-install(TARGETS wdtbin wdt wdt_min folly4wdt
+install(TARGETS wdtbin wdt wdt_min
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   )
+
+if (NOT WDT_USE_SYSTEM_FOLLY)
+  install(TARGETS folly4wdt
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    )
+endif()
 
 ### Install header files
 
@@ -248,46 +289,43 @@ install(PROGRAMS test/wcp.sh DESTINATION bin RENAME wcp)
 if (BUILD_TESTING)
 
   enable_testing()
+  find_package(GTest CONFIG REQUIRED)
+  if(NOT GTest_FOUND)
+    include(ExternalProject)
+
+    # GTest
+    #  from https://github.com/google/googletest/tree/master/googletest
+    configure_file(CMakeLists.txt.in googletest-download/CMakeLists.txt)
+    execute_process(COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" .
+      RESULT_VARIABLE result
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/googletest-download )
+    if(result)
+      message(FATAL_ERROR "CMake step for googletest failed: ${result}")
+    endif()
+    execute_process(COMMAND ${CMAKE_COMMAND} --build .
+      RESULT_VARIABLE result
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/googletest-download )
+    if(result)
+      message(FATAL_ERROR "Build step for googletest failed: ${result}")
+    endif()
+
+    # Prevent overriding the parent project's compiler/linker
+    # settings on Windows
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+
+    # Add googletest directly to our build. This defines
+    # the gtest and gtest_main targets.
+    add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
+                     ${CMAKE_CURRENT_BINARY_DIR}/googletest-build
+                     EXCLUDE_FROM_ALL)
+  endif()
 
   # Extra code that we use in tests
   add_library(wdt4tests_min
     test/TestCommon.cpp
   )
-
-  include(ExternalProject)
-
-  # GTest
-  set(GTEST_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/gtest")
-  externalproject_add(
-    gtest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    INSTALL_COMMAND "" # Disable install step
-    UPDATE_COMMAND "" # Doesn't change often
-    PREFIX "${GTEST_PREFIX}"
-    #CONFIGURE_COMMAND "" # skip
-    #BUILD_COMMAND "" # skip
-    LOG_DOWNLOAD ON
-    LOG_CONFIGURE ON
-    LOG_BUILD ON
-  )
-  # Specify include dir for gtest
-  externalproject_get_property(gtest SOURCE_DIR)
-  include_directories("${SOURCE_DIR}/googletest/include")
-
-  externalproject_get_property(gtest BINARY_DIR)
-
-  #  add_library(gmock_all STATIC EXCLUDE_FROM_ALL
-  #   ${GMOCK_PREFIX}/src/gmock/gtest/src/gtest-all.cc
-  #   ${GMOCK_PREFIX}/src/gmock/gmock-all.cc
-  #   ${GMOCK_PREFIX}/src/gmock/gmock_main.cc)
-
-  add_dependencies(wdt4tests_min gtest)
-
-  # ${BINARY_DIR}/libgtest.a works everywhere except xcode...
-# so ugly weird hack generating warnings about unknown dir for now:
   target_link_libraries(wdt4tests_min
-    #"-L ${BINARY_DIR}/googlemock/gtest -L ${BINARY_DIR}/Debug -lgtest"
-    "-L ${BINARY_DIR}/googlemock/gtest -lgtest"
+    gtest
     wdt_min
   )
 
@@ -312,9 +350,8 @@ if (BUILD_TESTING)
   add_library(wdtbenchtestslib
     bench/WdtGenTestUtils.cpp
   )
-  add_dependencies(wdtbenchtestslib gtest)
   target_link_libraries(wdtbenchtestslib
-    "-L ${BINARY_DIR}/googlemock/gtest -lgtest"
+    gtest
     wdtbenchlib
     ${CMAKE_THREAD_LIBS_INIT} # Must be last to avoid link errors
   )
