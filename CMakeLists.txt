@@ -13,8 +13,7 @@
 #  All rights reserved.
 #
 #  This source code is licensed under the BSD-style license found in the
-#  LICENSE file in the root directory of this source tree. An additional grant
-#  of patent rights can be found in the PATENTS file in the same directory.
+#  LICENSE file in the root directory of this source tree.
 #
 
 cmake_minimum_required(VERSION 3.2)
@@ -24,11 +23,8 @@ cmake_minimum_required(VERSION 3.2)
 # Minor currently is also the protocol version - has to match with Protocol.cpp
 project("WDT" LANGUAGES C CXX VERSION 1.32.1910230)
 
-# On MacOS this requires the latest (master) CMake (and/or CMake 3.1.1/3.2)
-# WDT itself works fine with C++11 (gcc 4.8 for instance) but more recent folly
-# started to require C++14, so you can either get an older snapshot of folly
-# and set "11" below or use this:
-set(CMAKE_CXX_STANDARD 14)
+# WDT uses C++17 features per fdbc5432230290f86ff8ad89ab52d5b7fef232b4
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED on)
 
 # somehow 'option' for this doesn't seeem to work/I don't know how to make it
@@ -74,11 +70,13 @@ if (NOT WDT_USE_SYSTEM_FOLLY)
   "${FOLLY_SOURCE_DIR}/folly/Conv.cpp"
   "${FOLLY_SOURCE_DIR}/folly/Demangle.cpp"
   "${FOLLY_SOURCE_DIR}/folly/lang/CString.cpp"
+  "${FOLLY_SOURCE_DIR}/folly/lang/ToAscii.cpp"
   "${FOLLY_SOURCE_DIR}/folly/hash/Checksum.cpp"
   "${FOLLY_SOURCE_DIR}/folly/hash/detail/ChecksumDetail.cpp"
   "${FOLLY_SOURCE_DIR}/folly/hash/detail/Crc32cDetail.cpp"
   "${FOLLY_SOURCE_DIR}/folly/hash/detail/Crc32CombineDetail.cpp"
   "${FOLLY_SOURCE_DIR}/folly/ScopeGuard.cpp"
+  "${FOLLY_SOURCE_DIR}/folly/detail/SplitStringSimd.cpp"
   )
 endif()
 
@@ -209,11 +207,6 @@ set(CMAKE_REQUIRED_LIBRARIES ${SAVE_CMRL}) #globals are evil/ugly
 set(CMAKE_REQUIRED_DEFINITIONS ${CMAKE_CXX11_STANDARD_COMPILE_OPTION})
 check_include_file_cxx(linux/sockios.h WDT_HAS_SOCKIOS_H)
 #check_function_exists(clock_gettime FOLLY_HAVE_CLOCK_GETTIME)
-check_cxx_source_compiles("#include <type_traits>
-      #if !_LIBCPP_VERSION
-      #error No libc++
-      #endif
-      int main() {return 0;}" FOLLY_USE_LIBCPP)
 check_cxx_source_compiles(
 "extern \"C\" void cmkcheckweak() __attribute__((weak));
 int main(int argc, char** argv) {

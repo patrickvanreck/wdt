@@ -3,8 +3,7 @@
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 #include <wdt/WdtTransferRequest.h>
 #include <folly/Conv.h>
@@ -188,7 +187,7 @@ ErrorCode WdtUri::process(const string& url) {
       string portStr;
       portStr.assign(urlPiece.data(), 0, paramsIndex);
       port_ = folly::to<int32_t>(portStr);
-    } catch (std::exception& e) {
+    } catch (std::exception& ) {
       WLOG(ERROR) << "Invalid port, can't be parsed " << url;
       status = URI_PARSE_ERROR;
     }
@@ -374,7 +373,7 @@ WdtTransferRequest::WdtTransferRequest(const string& uriString) {
       try {
         port = folly::to<int32_t>(portNum);
         ports.push_back(port);
-      } catch (std::exception& e) {
+      } catch (std::exception& ) {
         WLOG(ERROR) << "Couldn't convert " << portNum
                     << " to valid port number";
         errorCode = URI_PARSE_ERROR;
@@ -396,7 +395,7 @@ WdtTransferRequest::WdtTransferRequest(const string& uriString) {
     } else {
       try {
         startPort = folly::to<int32_t>(startPortStr);
-      } catch (std::exception& e) {
+      } catch (std::exception& ) {
         WLOG(ERROR) << "Couldn't convert start port " << startPortStr;
         errorCode = URI_PARSE_ERROR;
       }
@@ -409,7 +408,7 @@ WdtTransferRequest::WdtTransferRequest(const string& uriString) {
   } else {
     try {
       numPorts = folly::to<int32_t>(numPortsStr);
-    } catch (std::exception& e) {
+    } catch (std::exception& ) {
       WLOG(ERROR) << "Couldn't convert num ports " << numPortsStr;
       errorCode = URI_PARSE_ERROR;
     }

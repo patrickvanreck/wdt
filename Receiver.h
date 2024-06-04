@@ -3,8 +3,7 @@
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 #pragma once
 
@@ -204,7 +203,7 @@ class Receiver : public WdtBase {
   std::vector<Checkpoint> checkpoints_;
 
   /// Start time of the session
-  std::chrono::time_point<Clock> startTime_;
+  std::atomic<std::chrono::time_point<Clock>> startTime_;
 
   /// already transferred file chunks
   std::vector<FileChunksInfo> fileChunksInfo_;

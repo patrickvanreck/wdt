@@ -3,16 +3,13 @@
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 #pragma once
 
 #include <chrono>
 #include <iostream>
 #include <memory>
-
-#include <gtest/gtest_prod.h>
 
 #include <wdt/WdtBase.h>
 #include <wdt/util/ClientSocket.h>
@@ -131,7 +128,7 @@ class Sender : public WdtBase {
     }
 
     bool shouldAbort() const override {
-      return (sender_->getTransferStatus() == FINISHED);
+      return (sender_->getTransferStatus() == TransferStatus::FINISHED);
     }
 
    private:

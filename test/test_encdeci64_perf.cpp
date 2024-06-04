@@ -3,8 +3,7 @@
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 /**
 * Performance benchmark/tests for varint encoding/decoding
@@ -15,7 +14,7 @@
 
 #include <common/encode/Coding.h>  // this won't work outside of fb
 #include <folly/Benchmark.h>
-#include "TestCommon.h"
+#include "wdt/test/TestCommon.h"
 
 using namespace facebook::wdt;
 

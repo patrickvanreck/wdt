@@ -3,8 +3,7 @@
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 #include <wdt/WdtBase.h>
 #include <wdt/WdtTransferRequest.h>
@@ -29,7 +28,7 @@ WdtBase::~WdtBase() {
 }
 
 void WdtBase::abort(const ErrorCode abortCode) {
-  folly::RWSpinLock::WriteHolder guard(abortCodeLock_);
+  std::unique_lock guard(abortCodeLock_);
   if (abortCode == VERSION_MISMATCH && abortCode_ != OK) {
     // VERSION_MISMATCH is the lowest priority abort code. If the abort code is
     // anything other than OK, we should not override it
@@ -40,7 +39,7 @@ void WdtBase::abort(const ErrorCode abortCode) {
 }
 
 void WdtBase::clearAbort() {
-  folly::RWSpinLock::WriteHolder guard(abortCodeLock_);
+  std::unique_lock guard(abortCodeLock_);
   if (abortCode_ != VERSION_MISMATCH) {
     // We do no clear abort code unless it is VERSION_MISMATCH
     return;
@@ -58,7 +57,7 @@ ErrorCode WdtBase::getCurAbortCode() const {
   if (abortChecker_ && abortChecker_->shouldAbort()) {
     return ABORTED_BY_APPLICATION;
   }
-  folly::RWSpinLock::ReadHolder guard(abortCodeLock_);
+  std::shared_lock guard(abortCodeLock_);
   // internal check:
   return abortCode_;
 }
@@ -160,19 +159,19 @@ ErrorCode WdtBase::validateTransferRequest() {
 void WdtBase::setTransferStatus(TransferStatus transferStatus) {
   std::lock_guard<std::mutex> lock(mutex_);
   transferStatus_ = transferStatus;
-  if (transferStatus_ == THREADS_JOINED) {
+  if (transferStatus_ == TransferStatus::THREADS_JOINED) {
     conditionFinished_.notify_one();
   }
 }
 
 bool WdtBase::isStale() {
   TransferStatus status = getTransferStatus();
-  return (status == FINISHED || status == THREADS_JOINED);
+  return (status == TransferStatus::FINISHED || status == TransferStatus::THREADS_JOINED);
 }
 
 bool WdtBase::hasStarted() {
   TransferStatus status = getTransferStatus();
-  return (status != NOT_STARTED);
+  return (status != TransferStatus::NOT_STARTED);
 }
 
 void WdtBase::configureThrottler() {

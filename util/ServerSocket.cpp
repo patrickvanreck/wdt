@@ -3,8 +3,7 @@
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 #include <wdt/util/ServerSocket.h>
 #include <fcntl.h>
@@ -15,7 +14,6 @@
 #include <algorithm>
 namespace facebook {
 namespace wdt {
-using std::string;
 
 ServerSocket::ServerSocket(ThreadCtx &threadCtx, int port, int backlog,
                            const EncryptionParams &encryptionParams,

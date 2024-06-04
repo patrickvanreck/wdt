@@ -3,15 +3,13 @@
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 #include <wdt/util/FileCreator.h>
 #include <wdt/ErrorCodes.h>
 
 #include <fcntl.h>
 #include <folly/Conv.h>
-#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -95,7 +93,7 @@ int FileCreator::openForFirstBlock(ThreadCtx &threadCtx,
                                    BlockDetails const *blockDetails) {
   int fd = openAndSetSize(threadCtx, blockDetails);
   {
-    folly::SpinLockGuard guard(lock_);
+    std::unique_lock guard(lock_);
     auto it = fileStatusMap_.find(blockDetails->seqId);
     WDT_CHECK(it != fileStatusMap_.end());
     it->second = fd >= 0 ? ALLOCATED : FAILED;
@@ -110,7 +108,7 @@ bool FileCreator::waitForAllocationFinish(int allocatingThreadIndex,
   std::unique_lock<std::mutex> waitLock(allocationMutex_);
   while (true) {
     {
-      folly::SpinLockGuard guard(lock_);
+      std::unique_lock guard(lock_);
       auto it = fileStatusMap_.find(seqId);
       WDT_CHECK(it != fileStatusMap_.end());
       if (it->second == ALLOCATED) {

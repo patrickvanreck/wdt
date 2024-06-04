@@ -3,8 +3,7 @@
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 #include <wdt/Receiver.h>
 #include <wdt/util/EncryptionUtils.h>
@@ -83,7 +82,7 @@ void Receiver::startNewGlobalSession(const std::string &peerIp) {
     // when the current session ends
     throttler_->startTransfer();
   }
-  startTime_ = Clock::now();
+  startTime_.store(Clock::now());
   if (options_.enable_download_resumption) {
     transferLogManager_->startThread();
     bool verifySuccessful = transferLogManager_->verifySenderIp(peerIp);
@@ -101,7 +100,7 @@ bool Receiver::hasNewTransferStarted() const {
 }
 
 void Receiver::endCurGlobalSession() {
-  setTransferStatus(FINISHED);
+  setTransferStatus(TransferStatus::FINISHED);
   if (!hasNewTransferStarted_) {
     WLOG(WARNING) << "WDT transfer did not start, no need to end session";
     return;
@@ -268,7 +267,7 @@ Receiver::AcceptMode Receiver::getAcceptMode() {
 
 Receiver::~Receiver() {
   TransferStatus status = getTransferStatus();
-  if (status == ONGOING) {
+  if (status == TransferStatus::ONGOING) {
     WLOG(WARNING) << "There is an ongoing transfer and the destructor"
                   << " is being called. Trying to finish the transfer";
     abort(ABORTED_BY_APPLICATION);
@@ -294,12 +293,12 @@ int64_t Receiver::getTransferConfig() const {
 std::unique_ptr<TransferReport> Receiver::finish() {
   std::unique_lock<std::mutex> instanceLock(instanceManagementMutex_);
   TransferStatus status = getTransferStatus();
-  if (status == NOT_STARTED) {
+  if (status == TransferStatus::NOT_STARTED) {
     WLOG(WARNING) << "Even though transfer has not started, finish is called";
     // getTransferReport will set the error code to ERROR
     return getTransferReport();
   }
-  if (status == THREADS_JOINED) {
+  if (status == TransferStatus::THREADS_JOINED) {
     WLOG(WARNING) << "Threads have already been joined. Returning the "
                   << "transfer report";
     return getTransferReport();
@@ -313,7 +312,7 @@ std::unique_ptr<TransferReport> Receiver::finish() {
     receiverThread->finish();
   }
 
-  setTransferStatus(THREADS_JOINED);
+  setTransferStatus(TransferStatus::THREADS_JOINED);
 
   if (isJoinable_) {
     // Make sure to join the progress thread.
@@ -326,7 +325,7 @@ std::unique_ptr<TransferReport> Receiver::finish() {
   auto totalSenderBytes = summary.getTotalSenderBytes();
   if (progressReporter_ && totalSenderBytes >= 0) {
     report->setTotalFileSize(totalSenderBytes);
-    report->setTotalTime(durationSeconds(Clock::now() - startTime_));
+    report->setTotalTime(durationSeconds(Clock::now() - startTime_.load()));
     progressReporter_->end(report);
   }
   logPerfStats();
@@ -345,7 +344,7 @@ std::unique_ptr<TransferReport> Receiver::getTransferReport() {
       std::make_unique<TransferReport>(std::move(globalStats));
   TransferStatus status = getTransferStatus();
   ErrorCode errCode = transferReport->getSummary().getErrorCode();
-  if (status == NOT_STARTED && errCode == OK) {
+  if (status == TransferStatus::NOT_STARTED && errCode == OK) {
     WLOG(INFO) << "Transfer not started, setting the error code to ERROR";
     transferReport->setErrorCode(ERROR);
   }
@@ -404,11 +403,11 @@ void Receiver::progressTracker() {
     {
       std::unique_lock<std::mutex> lock(mutex_);
       conditionFinished_.wait_for(lock, waitingTime);
-      if (transferStatus_ == THREADS_JOINED) {
+      if (transferStatus_ == TransferStatus::THREADS_JOINED) {
         break;
       }
     }
-    double totalTime = durationSeconds(Clock::now() - startTime_);
+    double totalTime = durationSeconds(Clock::now() - startTime_.load());
     TransferStats globalStats;
     for (const auto &receiverThread : receiverThreads_) {
       globalStats += receiverThread->getTransferStats();
@@ -452,7 +451,7 @@ void Receiver::logPerfStats() const {
 }
 
 ErrorCode Receiver::start() {
-  WDT_CHECK_EQ(getTransferStatus(), NOT_STARTED)
+  WDT_CHECK_EQ(getTransferStatus(), TransferStatus::NOT_STARTED)
       << "There is already a transfer running on this instance of receiver";
   startTime_ = Clock::now();
   WLOG(INFO) << "Starting (receiving) server on ports [ "
@@ -463,7 +462,7 @@ ErrorCode Receiver::start() {
   } else {
     WLOG(INFO) << "Throttler set externally. Throttler : " << *throttler_;
   }
-  setTransferStatus(ONGOING);
+  setTransferStatus(TransferStatus::ONGOING);
   while (true) {
     for (auto &receiverThread : receiverThreads_) {
       receiverThread->startThread();
@@ -480,7 +479,7 @@ ErrorCode Receiver::start() {
     }
     threadsController_->reset();
     // reset transfer status
-    setTransferStatus(NOT_STARTED);
+    setTransferStatus(TransferStatus::NOT_STARTED);
     continue;
   }
   if (isJoinable_) {
